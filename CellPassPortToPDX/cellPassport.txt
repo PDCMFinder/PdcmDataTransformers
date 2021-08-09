@@ -1,0 +1,95 @@
+{ "cells": \[ { "cell\_type": "code", "execution\_count": 134, "id":
+"b3b5874b", "metadata": {}, "outputs": \[\], "source": \[ "import pandas
+as pd\n", "import sys\n", "import math" \] }, { "cell\_type": "code",
+"execution\_count": 135, "id": "e4b77b70", "metadata": {}, "outputs": \[
+{ "data": { "text/html": \[ "
+<style>.container { width:100% !important; }</style>
+" \], "text/plain": \[ "&lt;IPython.core.display.HTML object&gt;" \] },
+"metadata": {}, "output\_type": "display\_data" } \], "source": \[ "from
+IPython.core.display import display, HTML\n", "display(HTML("
+<style>.container { width:100% !important; }</style>
+"))" \] }, { "cell\_type": "code", "execution\_count": 172, "id":
+"4c07cc99", "metadata": {}, "outputs": \[\], "source": \[
+"cellPassportDf = pd.read\_excel("model\_list\_20210310.xlsx",
+engine="openpyxl")" \] }, { "cell\_type": "code", "execution\_count":
+173, "id": "be7ba88b", "metadata": {}, "outputs": \[\], "source": \[
+"patient\_template = pd.read\_csv("metadata\_template-patient.tsv",
+sep='\\t').dropna(axis=0, how='all')\n", "sample\_template =
+pd.read\_csv("metadata\_template-sample.tsv", sep='\\t').dropna(axis=0,
+how='all')" \] }, { "cell\_type": "code", "execution\_count": 174, "id":
+"392d500d", "metadata": {}, "outputs": \[\], "source": \[ "def
+align\_and\_append\_sheet(template, other\_sheet):\n", " alignment =
+template.align(other\_sheet, join="outer")\[1\]\n", " return
+template.append(alignment).dropna(axis=0, how='all')" \] }, {
+"cell\_type": "code", "execution\_count": 175, "id": "a2f16d97",
+"metadata": {}, "outputs": \[\], "source": \[ "def
+transformCellPassport\_patient(cellPassportDf):\n", " patient\_columns =
+\["patient\_id", "gender", "smoking\_status", "ethnicity"\]\n", " \# No
+direct value changes are needed for the patient sheet\n", "
+patient\_column\_name\_changes = {"gender":"sex",
+"smoking\_status":"history"}\n", " cell\_passport\_patient\_sheet =
+cellPassportDf.loc\[:, patient\_columns\].rename(columns =
+patient\_column\_name\_changes)\n", "
+align\_and\_append\_sheet(patient\_template,
+cell\_passport\_patient\_sheet).to\_csv("HCMI\_metadata-patient.tsv",
+sep='\\t', index=False)" \] }, { "cell\_type": "code",
+"execution\_count": 176, "id": "694d45d3", "metadata": {}, "outputs":
+\[\], "source": \[ "def numToMon(num):\n", " month\_str = ""\n", " if
+not math.isnan(num):\n", " num\_int = int(num)\n", " months =
+\["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"
+\]\n", " month\_str = months\[num\_int - 1\]\n", " return month\_str\n",
+" " \] }, { "cell\_type": "code", "execution\_count": 177, "id":
+"6033bc76", "metadata": {}, "outputs": \[\], "source": \[
+"sample\_columns = \["patient\_id", "sample\_id", "model\_id",
+"sampling\_year", "sampling\_month", "age\_at\_sampling",
+"cancer\_type\_detail", "tissue\_status", "tissue", "sample\_site",
+"tnm\_t", "tnm\_n", "tnm\_m", "tumour\_grade", "sample\_treatment"\]\n",
+"cell\_passport\_columns = cellPassportDf.loc\[:, sample\_columns\] \n",
+"cell\_passport\_sample\_sheet = pd.DataFrame()\n", "\n",
+"columns\_To\_Drop = \["sampling\_year", "sampling\_month", "tnm\_t",
+"tnm\_n", "tnm\_m", "sample\_treatment"\]\n", "sample\_rename\_mapping =
+{ "age\_at\_sampling" : "age\_in\_years\_at\_collection",
+"cancer\_type\_detail":"diagnosis", "tissue\_status":"tumour\_type",
+"tissue" : "primary\_site", "sample\_site":"collection\_site",
+"tumour\_grade": "grade" }\n", "cell\_passport\_sample\_sheet =
+cell\_passport\_columns.drop(columns=columns\_To\_Drop).rename(columns=sample\_rename\_mapping)\n",
+"\#Format collection date\n",
+"cell\_passport\_columns\["sampling\_month"\] =
+cell\_passport\_columns\["sampling\_month"\].apply(numToMon)\n", "\n" \]
+}, { "cell\_type": "code", "execution\_count": 178, "id": "4e3b90d3",
+"metadata": {}, "outputs": \[\], "source": \[
+"cell\_passport\_sample\_sheet\['collection\_date'\] =
+cell\_passport\_columns\["sampling\_month"\] + " " +
+cell\_passport\_columns\["sampling\_year"\].astype(str)\n",
+"cell\_passport\_sample\_sheet\['collection\_date'\] =
+cell\_passport\_sample\_sheet\['collection\_date'\].str.replace(" nan",
+"")\n", "\#Cat TNM staging system\n",
+"cell\_passport\_sample\_sheet\['stage'\] =
+cell\_passport\_columns\["tnm\_t"\] + "," +
+cell\_passport\_columns\["tnm\_n"\] + "," +
+cell\_passport\_columns\["tnm\_m"\]\n", "\#Hard coded values\n",
+"cell\_passport\_sample\_sheet\["staging\_system"\] = "TNM staging
+system"\n", "cell\_passport\_sample\_sheet\["sharable"\] = "yes"\n" \]
+}, { "cell\_type": "code", "execution\_count": 179, "id": "9c31cdc5",
+"metadata": {}, "outputs": \[\], "source": \[ "tumour\_type\_filter =
+\["Metastasis", "Unknown", "Tumour"\]\n", "filtered\_passport =
+cell\_passport\_sample\_sheet\[cell\_passport\_sample\_sheet\["tumour\_type"\].isin(tumour\_type\_filter)\]\n",
+"\n", "\#Need to proccess sample\_treatment as well still\n",
+"align\_and\_append\_sheet(sample\_template,filtered\_passport).to\_csv("HCMI\_metadata-sample.tsv",
+sep='\\t', index=False)" \] }, { "cell\_type": "code",
+"execution\_count": 181, "id": "fd846ad2", "metadata": {}, "outputs":
+\[\], "source": \[ "used\_columns = \["gender", "smoking\_status",
+"ethnicity", "sample\_id", "model\_id", "sampling\_year",
+"sampling\_month", "age\_at\_sampling", "cancer\_type\_detail",
+"tissue\_status", "tissue", "sample\_site", "tnm\_t", "tnm\_n",
+"tnm\_m", "tumour\_grade", "sample\_treatment"\]\n",
+"cellPassportDf.drop(columns=used\_columns).to\_csv("leftovers.tsv",
+sep='\\t', index=False)" \] }, { "cell\_type": "code",
+"execution\_count": null, "id": "96cf199b", "metadata": {}, "outputs":
+\[\], "source": \[\] } \], "metadata": { "kernelspec": {
+"display\_name": "Python 3", "language": "python", "name": "python3" },
+"language\_info": { "codemirror\_mode": { "name": "ipython", "version":
+3 }, "file\_extension": ".py", "mimetype": "text/x-python", "name":
+"python", "nbconvert\_exporter": "python", "pygments\_lexer":
+"ipython3", "version": "3.6.9" } }, "nbformat": 4, "nbformat\_minor": 5
+}
