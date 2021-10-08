@@ -75,6 +75,7 @@ def generate_sharing(hcmiDf, sharing_template):
     contact_email = "ocg@mail.nih.gov"
     HCMI_sharing_sheet = hcmiDf.loc[:, sharing_columns].rename(columns=sharing_columns_rename_map)
     HCMI_sharing_sheet['email'] = contact_email
+    HCMI_sharing_sheet['name'] = “HCMI Program Office” 
     HCMI_sharing_sheet['accessibility'] = "industry and academia"
     HCMI_sharing_sheet['database_url'] = f'https://hcmi-searchable-catalog.nci.nih.gov/model/{model_id}'
     align_and_append_sheet(sharing_template, HCMI_sharing_sheet).to_csv("HCMI_metadata-sharing.tsv", sep='\t', index=False)
