@@ -51,7 +51,6 @@ def generate_sample_sheet(hcmiDf, sample_template, clinicalDf):
     HCMI_sample_columns["grading_system"] = "AJCC"
     HCMI_sample_columns['sharable'] = 'yes'
     HCMI_sample_columns['treated_prior_to_collection'] = clinicalDf['prior_treatment']
-    #import pdb; pdb.set_trace()
     indexOfPriorTreated = HCMI_sample_columns['treated_prior_to_collection'].str.lower() == "yes"
     notIndexOfPriorTreated = HCMI_sample_columns['treated_prior_to_collection'].str.lower() != "yes"
     HCMI_sample_columns.loc[indexOfPriorTreated, "treatment_naive_at_collection"] = "no"
