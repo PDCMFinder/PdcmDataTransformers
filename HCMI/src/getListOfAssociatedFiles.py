@@ -25,40 +25,41 @@ def get_case_json(case_uuid):
          return None
 
 
-def parse_response_json(response_json, case_uuid):
+def parse_response_json(response_json, model_id, case_uuid):
      hits = response_json.get('data').get('hits')
      file_list = []
      if hits:
          for hit in hits:
              files = hit.get("files")
              for file in files:
-                file_list.append([case_uuid, file.get('file_id'), file.get('file_name'), file.get('access'), file.get('experimental_strategy')])
+                file_list.append([model_id, case_uuid, file.get('file_id'), file.get('file_name'), file.get('access'), file.get('experimental_strategy')])
      return file_list
 
 
 def filter_files(file_list):
     filtered_file_list = []
     for file in file_list:
-        if file[3] == 'open':
+        if file[4] == 'open':
             filtered_file_list.append(file)
     return filtered_file_list
 
 def get_case_files(row):
+     model_id = row["Name"]
      case_uuid = row['case_uuid']
      filtered_file_list = []
      if case_uuid:
         response_json = get_case_json(case_uuid)
         if response_json:
-             file_list = parse_response_json(response_json,case_uuid)
+             file_list = parse_response_json(response_json,model_id, case_uuid)
              filtered_file_list = filter_files(file_list)
      return filtered_file_list
 
 
-model_table  = pd.read_csv("model-table.tsv", sep='\t', usecols=["Name", "Link to Model Details"])
+model_table  = pd.read_csv("./resources/model-table.tsv", sep='\t', usecols=["Name", "Link to Model Details"])
 model_table['case_uuid'] = model_table.apply(clean_case_uuid, axis=1)
 case_by_file_list = model_table.apply(get_case_files, axis=1)
 flattened_case_by_list = []
 for case_files in case_by_file_list:
     for file in case_files:
         flattened_case_by_list.append(file)
-pd.DataFrame(flattened_case_by_list).to_csv("./resource/case-by-file-list.tsv", sep='\t', index=False)
+pd.DataFrame(flattened_case_by_list).to_csv("./resources/case-by-file-list.tsv", sep='\t', index=False)
