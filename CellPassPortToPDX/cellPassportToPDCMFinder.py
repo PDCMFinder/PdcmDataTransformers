@@ -8,7 +8,6 @@ def align_and_append_sheet(template, other_sheet):
     alignment = template.align(other_sheet, join="outer")[1]
     return template.append(alignment).dropna(axis=0, how='all').dropna(axis=1, how='all')
 
-
 def numToMon(num):
     month_str = ""
     if not math.isnan(num):
@@ -16,7 +15,6 @@ def numToMon(num):
         months = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec" ]
         month_str = months[num_int - 1]
     return month_str
-
 
 def transformCellPassport_patient(cellPassportDf, patient_template):
     patient_columns = ["patient_id", "gender", "smoking_status", "ethnicity"]
@@ -92,7 +90,7 @@ def if_str_not_na_prepend_str(str_to_check, str_to_prepend):
 def getTemplates():
     patient_template = pd.read_csv("metadata_template-patient.tsv", sep='\t').dropna(axis=0, how='all')
     sample_template = pd.read_csv("metadata_template-sample.tsv", sep='\t').dropna(axis=0, how='all')
-    cell_models_template = pd.read_csv("cell_and_organoid_metadata_template-other_models.tsv", sep='\t').dropna(axis=0,
+    cell_models_template = pd.read_csv("metadata_template-cell_model.tsv", sep='\t').dropna(axis=0,
                                                                                                                  how='all')
     model_validation_template = pd.read_csv("metadata_template-model_validation.tsv", sep='\t').dropna(axis=0,
                                                                                                        how='all')
@@ -111,6 +109,8 @@ def transformCellPassport_model_validation(filteredCpDf, model_validation_templa
 
 def createCellPassportPdxFinderTemplates():
     cellPassportDf = pd.read_csv("model_list_20210310.csv", engine="c", sep='\t').dropna(axis=0, how='all')
+    if not os.path.exists('pdcm_format'):
+        os.makedirs('pdcm_format')
     filteredCpDf = filterMainDataFrame(cellPassportDf)
     patient_template, sample_template, cell_models_template, model_validation_template, sharing_template = getTemplates()
     transformCellPassport_patient(filteredCpDf, patient_template)
