@@ -1,5 +1,6 @@
     "The dwarves delved too greedily and too deep..."
     
+    
 This project transforms the HCMI data set into the PDCM Finder format. There are two main proccesses:
     1. Parse the metadata
     2. Download and parse somatic mutations.
@@ -24,4 +25,4 @@ Next to download and parse the mutation data run the script: get_somatic_files.p
 
 This uses the id's found in the model-table.tsv to download maf.gz's from the GDC API. The are unzipped and transformed to the PDCM format. Both the HCMI_molecular_metadata-sample.tsv and the HCMI_molecular_metadata-platform.tsv. 
 
-
+There is further data types on the GDC repository for this project. "get_CNA_file.py" is an unfinished pull for this. The CNA data will need a the fold ratios proccessed.
