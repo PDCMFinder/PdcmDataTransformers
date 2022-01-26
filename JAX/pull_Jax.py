@@ -47,9 +47,9 @@ def post_proccess(out_file, dirname):
         print(e)
 
 def get_molecular_metadata_samples_and_data(api_root):
-    filename = f'./data/UPDOG/JAX/JAX_molecular-metadata_sample.tsv'
+    filename = f'./data/UPDOG/JAX/JAX_molecular_metadata-sample.tsv'
     with open(filename, 'a+') as molecular_sample:
-        endpoints_base_dict = {"modelsWithVariationData": ("model_variation", "mut"), "modelsWithCNAData":("cna","cna"),"modelsWithExpData": ("exp", "expression"), "modelsWithCytogenetics": ("cytogenetics", "cyto")}
+        endpoints_base_dict = {"modelsWithVariationData": ("model_variation", "mut"), "modelsWithCNAData":("cna","cna"),"modelsWithExpData": ("exp", "expression")}
         for endpoint_base, endpointAndDirname in endpoints_base_dict.items():
             print(f'Downloading {endpoint_base} data')
             endpoint_url = f'{api_root}{endpoint_base}'
