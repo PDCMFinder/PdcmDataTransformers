@@ -107,7 +107,7 @@ def transform_patient_sample_data(path, clinical, model):
 
     clinical['age'] = clinical['Event Age *']
     model['age'] = model['Age at Collection *'] 
-    merged = pd.merge(clinical[['Patient ID *', 'Event Type *', 'age', 'Event Setting *', 'pT', 'pN', 'pM', 'Tumor Grade', 'Treatment Naïve']], model[['Patient ID *', 'age', 'Model ID *', 'Disease Group *', 'Specimen Site']], on=['Patient ID *', 'age'])
+    merged = pd.merge(clinical[['Patient ID *', 'Event Type *', 'age', 'Event Setting *', 'pT', 'pN', 'pM', 'Tumor Grade', "Treatment Naïve"]], model[['Patient ID *', 'age', 'Model ID *', 'Disease Group *', 'Specimen Site']], on=['Patient ID *', 'age'])
     dups = merged[merged.duplicated(subset=['Patient ID *', 'age'], keep=False)]
     print("Number of duplicate entries: %d" %len(dups))
     write_tsv(join(path, 'Dups.tsv'), merged)
@@ -198,7 +198,13 @@ def transform_cytogenetics(clinical, patient_sample):
     return out_cyto
 
     
-    
+def transform_treatment_data(treatment, ps_models):
+    mapper = {'Patient ID *': 'patient_id', 'Treatment': 'treatment_name'}
+    treatment = treatment.rename(mapper, axis=1)
+
+    treatment_out = pd.merge(treatment, ps_models[["patient_id", "model_id"]], on=['patient_id'])
+    return treatment_out
+
 def generate_tsv(input_path):
     patient, clinical, treatment, model = read_data(input_path)
     model = model.iloc[0:18,]
@@ -213,11 +219,12 @@ def generate_tsv(input_path):
     ## Before cyto:
     patient_sample = ps_models.drop([16,17],axis=0).reset_index(drop=True)
     write_tsv(join(output_path, 'PDXNet_cytogenetics.tsv'), transform_cytogenetics(clinical, patient_sample))
+    write_tsv(join(output_path, 'PDXNet_treatment.tsv'), transform_treatment_data(treatment, ps_models))
+
     
-    
-input_path = "E:/EBI/Work/PDXNet/PDXPortal_Breast_Template_to_HCI-054.xlsx"
-output_path = "E:/EBI/Work/PDXNet/tsv"
-meta_path = "E:/EBI/Work/PDCM_data/active_templates/metadata"
+input_path = "/Users/tushar/Downloads/PDXPortal_Breast_Template_to_HCI-054.xlsx"
+output_path = "/Users/tushar/Downloads/"
+meta_path = "/Users/tushar/pdx/pdxfinder-data/template/active_templates/metadata"
 generate_tsv(input_path)
 
 #m_model, m_patient, m_p_sample, m_pdx, m_share = read_tsv(join(meta_path, 'metadata_template-model_validation.tsv')), read_tsv(join(meta_path, 'metadata_template-patient.tsv')), \
