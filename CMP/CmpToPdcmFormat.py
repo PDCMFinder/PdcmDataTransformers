@@ -3,6 +3,7 @@
 import pandas as pd
 import sys
 import math
+import os
 
 def align_and_append_sheet(template, other_sheet):
     alignment = template.align(other_sheet, join="outer")[1]
@@ -108,7 +109,7 @@ def transformCellPassport_model_validation(filteredCpDf, model_validation_templa
     return False
 
 def createCellPassportPdxFinderTemplates():
-    cellPassportDf = pd.read_csv("model_list_20210310.csv", engine="c", sep='\t').dropna(axis=0, how='all')
+    cellPassportDf = pd.read_csv("model_list_20220810.csv", engine="c", sep=',').dropna(axis=0, how='all')
     if not os.path.exists('pdcm_format'):
         os.makedirs('pdcm_format')
     filteredCpDf = filterMainDataFrame(cellPassportDf)
