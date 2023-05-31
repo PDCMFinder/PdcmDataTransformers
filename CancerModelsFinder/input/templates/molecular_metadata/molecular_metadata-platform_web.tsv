@@ -1,0 +1,5 @@
+Field	platform_id	molecular_methods_description	analysis_description
+#Description	Unique identify to platform metadata between sheets. can simply be molecular_charaterisation_type + a numerical identifier. No identifyer is needed if unique	Description of the methods and protocols used to generate the molecular data associated with the platform key. This could be a description of the sequencing experiment used to get the cna, mutation or expression data. Also this could be a description of the 	Description of the analysis of the molecular data provided 
+#Example	mutation1		
+#Format Requirements		Free Text in paragraph form. Basic markdown is supported for links, bolding, and bullet points	Free Text in paragraph form. Basic markdown is supported for links, bolding, and bullet points
+#Essential?	essential	essential	essential

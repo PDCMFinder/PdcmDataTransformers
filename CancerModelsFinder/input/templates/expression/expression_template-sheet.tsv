@@ -1,0 +1,1 @@
+sample_id	chromosome	strand	seq_start_position	seq_end_position	symbol	ucsc_gene_id	ncbi_gene_id	ensembl_gene_id	ensembl_transcript_id	rnaseq_coverage	rnaseq_fpkm	rnaseq_tpm	rnaseq_count	affy_hgea_probe_id	affy_hgea_expression_value	illumina_hgea_probe_id	illumina_hgea_expression_value	z_score	platform
