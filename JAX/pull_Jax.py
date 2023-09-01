@@ -76,7 +76,7 @@ def pull_jax_data():
 
 def main():
     api_root = "http://tumor.informatics.jax.org/PDXInfo/TSVData.do?"
-    arguments_options = argparse.ArgumentParser("Pulls all metadata and omic data from JAX classes")
+    arguments_options = argparse.ArgumentParser("Pulls all metadata and omic data from JAX utils")
     arguments_options.add_argument("-o", "--omics", help="Pull only the JAX molecular data", action="store_true")
     arguments_options.add_argument("-m", "--metadata", help="Pull only JAX molecular data", action="store_true")
     args = arguments_options.parse_args()
