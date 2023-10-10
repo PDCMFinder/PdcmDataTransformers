@@ -1,0 +1,74 @@
+Alvespimycin
+17-DMAG
+Venetoclax
+ABT-199
+ABT-263
+Navitoclax
+AZD1480
+JAK2 Inhibitor AZD1480
+AZD4547 (SAFIR 02)
+BBI608
+BMN-673
+Bevacizumab
+Bortezomib
+CB-5083
+CBL0137
+Pidnarulex
+JNJ-26481585
+JNJ-26854165
+Tazemetostat
+E7438/EPZ643
+EC1456
+GENZ-644282
+GSK690693
+Quisinostat
+Serdemetan
+Talazoparib
+Temsirolimus
+Topoisomerase I Inhibitor Genz-644282
+Vorinostat
+WNT974
+p97 Inhibitor CB-5083
+LY 2606368
+MK-2206
+MK-8242
+Onalespib
+PR-104
+Pixantrone
+RO4929097
+Romidepsin
+SAHA
+SB-715992
+STA9090 (Ganetespib)
+SVV-001
+TH-302
+TL32711
+Targeted Inhibitor (NOS)
+GSK923295A
+AZD4547
+Akt Inhibitor MK2206
+Birinapant
+CENP-E Inhibitor GSK-923295A
+CGM097
+Erdafitinib
+FACT Complex-targeting Curaxin CBL0137
+FGFR Inhibitor AZD4547
+Folate Receptor-Targeted Tubulysin Conjugate EC1456
+Gamma-Secretase Inhibitor RO4929097
+Ganetespib
+HDM2 Inhibitor MK-8242
+HDM201
+HSP990
+Hsp90-targeted Photosensitizer HS-201
+IDO/TDO Inhibitor LY-01013
+Ruxolitinib
+Ispinesib
+LCL161
+LDE225
+Methoxyamine
+Mitotane
+Napabucasin
+Niraparib
+Nirogacestat
+Octreotide
+Pan-AKT Kinase Inhibitor GSK690693

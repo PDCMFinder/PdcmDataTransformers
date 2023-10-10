@@ -1,0 +1,85 @@
+Capecitabine
+Xeloda
+eribulin
+doxorubicine
+Topotecan
+ vincristine
+3TAC
+Leucovorin
+paclitaxel
+12Taxol
+5-Fluorouracil
+Azacitidine
+Abraxane
+Actinomycin D
+Dactinomycin
+Aplidin
+Plitidepsin
+Bevacizumab/Irinotecan regimen
+Bendamustine
+Biochemotherapy
+Bleomycin
+CPX-351
+Polyamine Analogue PG11047
+Cabazitaxel
+Caelyx
+Campto 11
+Carboplatin
+Pegylated Liposomal Doxorubicin Hydrochloride
+Cisplatin
+Clofarabine
+Cloretazine
+Cyclophosphamide
+Cytarabine
+Eribulin
+Eribulin mesylate
+Indimitecan
+Indotecan
+Leucovorin calcium
+Carboplatin/Gemcitabine Regimen
+Vincristine
+Chlorambucil
+Dacarbazine
+Decitabine
+Elmustine
+Epirubicin
+Nab-paclitaxel
+Nitrogen Mustard Prodrug PR-104
+Purine Analogue NSC 750854
+5-Fluoro-2-Deoxycytidine
+Fluorouracil
+Fenretinide
+5-Fluoro-2-Deoxycytidine
+Temodal
+Temozolomide
+Capecitabine
+Dacarbazine
+Epirubicin
+Folinic acid
+Ibandronic acid
+Trabectedin
+Irinotecan
+Ixabepilone
+Medroxyprogesterone acetate
+Megace
+Oxaliplatin
+Pomidronate
+FloxuridineTrabectedin
+Vinorelbine
+Zoledronic acid
+Zometa
+Trifluridine
+Vindesine
+Topotecan Hydrochloride
+Pemetrexed
+Procarbazine
+Streptozocin
+Adriamycine
+CGC(PG)-11047
+Irinotecan
+Evofosfamide
+Floxuridine
+Irinotecan Hydrochloride
+Laromustine
+Lomustine
+Mitomycin
