@@ -2,9 +2,45 @@ from os import listdir, makedirs, getcwd
 from os.path import isfile, join, isdir, exists
 import pandas as pd
 from tqdm import tqdm
-from math import isnan
+import requests
+from random import randint
 
 geneSymbol_location = pd.read_csv("/Users/tushar/CancerModels/utils/PdcmDataTransformers/resources/genes.tsv", sep='\t')
+home = "/Users/tushar/CancerModels/pdxfinder-data/data/UPDOG/"
+templates = "/Users/tushar/CancerModels/pdxfinder-data/templates/active_templates"
+
+def request(link, flag, req_type):
+    success_quotes = {0: 'May the force be with you! ',
+                      1: 'Lights will guide you home! :*',
+                      2: 'Voila, got it!',
+                      3: 'Look what I found!!!'}
+
+    fail_quotes = {0: 'Oops something went wrong!',
+                   1: "You've ran into some trouble, check your input",
+                   2: "What I've done!!!! - Linkin Park",
+                   3: "Guess what I couldn't find."}
+    try:
+        if req_type == "get":
+            response = requests.get(link)
+        elif req_type == "post":
+            response = requests.post(link)
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
+            # Parse the JSON data (assuming the API returns JSON)
+            if flag:
+                print(success_quotes[randint(0, len(success_quotes)-1)])
+            return response
+        else:
+            # If the request was not successful, raise an exception
+            if flag:
+                print(fail_quotes[randint(0, len(fail_quotes)-1)])
+            response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        # Handle any exceptions that may occur during the request
+        print(f"An error occurred: {e}")
+        return None
+
+
 
 def get_dirs(path):
     return [f for f in listdir(path) if isdir(join(path, f))]
@@ -122,3 +158,27 @@ def get_geneSymbol_locations(paths):
     GeneSymbol_Locations = GeneSymbol_Locations[GeneSymbol_Locations.start.isna() ==False]
     GeneSymbol_Locations = GeneSymbol_Locations.drop_duplicates(subset=['Symbol'])
     GeneSymbol_Locations.to_csv("../resources/gene_lcoation.tsv", sep='\t', index=False)
+
+def merged_metadata(path):
+    tsv_files = sorted([join(path, f) for f in get_files(path) if f.endswith('.tsv') and not f.__contains__('image') and not f.__contains__('molecular_metadata')])
+    data = []
+    for f in tsv_files:
+        metadata = read_metadata_without_fields(f).fillna('Not Provided')
+        metadata = metadata.applymap(lambda x: x.lower() if type(x) == str else str(int(x)))
+        metadata = metadata.fillna('not provided').replace(
+            ['unspecified', 'not reported', 'not specified', 'not collected', 'unknown'], 'not provided')
+        if f.__contains__('patient.tsv'):
+            metadata = metadata.replace('self reported', 'self-assessed')
+            metadata['age_at_initial_diagnosis'] = [r if type(r) == str else str(int(r)) for r in metadata['age_at_initial_diagnosis']]
+            data.append(metadata)
+        elif f.__contains__('patient_sample.tsv'):
+            data.append(metadata)
+        elif f.__contains__('pdx_model.tsv'):
+            data.append(metadata)
+        elif f.__contains__('model_validation.tsv'):
+            data.append(metadata)
+        elif f.__contains__('cell_model.tsv'):
+            data.append(metadata)
+        elif f.__contains__('sharing.tsv'):
+            data.append(metadata)
+    return data

@@ -2,3 +2,4 @@
 .idea
 .ipynb_checkpoints
 *biospecimen.xml
+*homo_sapiens.json
