@@ -572,6 +572,8 @@ def generate_mutation_data(path, out_path):
               "ncbi_transcript_id": "RefSeq"}
     mut_df = read_mol_data(path).rename(columns=mapper).fillna("")
     mut_df = filter_samples(mut_df, "Tumor_Sample_Barcode", out_path)
+    if len(mut_df) == 0:
+        return None
     out_column = ["Hugo_Symbol", "Entrez_Gene_Id", "Center", "NCBI_Build", "Chromosome", "Start_Position",
                   "End_Position", "Strand", "Consequence", "Variant_Classification", "Variant_Type", "Reference_Allele",
                   "Tumor_Seq_Allele2", "dbSNP_RS", "dbSNP_Val_Status", "Tumor_Sample_Barcode",
@@ -638,6 +640,8 @@ def generate_cna_data(path, out_path, study, platform):
     datatype = "log"
     out_name = "log2_cna"
     df = filter_samples(df, "sample_id", out_path)
+    if len(df) == 0:
+        return None
     df['Hugo_Symbol'] = df['symbol']
     if df[col_value].isna().all():
         col_value = "gistic_value"
@@ -682,7 +686,8 @@ def generate_meta_expression(study, out_path, platform, datatype):
 def generate_expression_data(path, out_path, platform, study):
     df = read_mol_data(path)[["sample_id", "symbol", "rnaseq_fpkm", "z_score"]]
     df = filter_samples(df, "sample_id", out_path)
-
+    if len(df) == 0:
+        return None
     df["Hugo_Symbol"] = df["symbol"]
     no_fpkm = df['rnaseq_fpkm'].isna().all()
     datatype = "mrna"
@@ -920,9 +925,9 @@ def generate_c_bio_portal_files(in_path, out_path, provider):
 start_dir = getcwd()
 reference_df = get_hugo2ncbi()
 
-if len(sys.argv)>0:
-    home = sys.argv[1]
-    out_path = sys.argv[2]
+if len(sys.argv) > 0:
+    home = sys.argv[1] # Path to data
+    out_path = sys.argv[2] # output path
     providers = sorted(get_dirs(home))
 
     for i in tqdm(range(0, len(providers)),
