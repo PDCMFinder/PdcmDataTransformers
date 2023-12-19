@@ -796,7 +796,10 @@ def generate_timeline_data_file(in_path, provider, study, out_path, type):
                     treatment["start_date_time"] = 0
         out_cols = ["PATIENT_ID", "START_DATE", "STOP_DATE", "EVENT_TYPE", "TREATMENT_TYPE", "AGENT"]
         treatment["PATIENT_ID"] = treatment["patient_id"]
-        treatment["START_DATE"] = (treatment['start_date_time'] - treatment['date_time']).dt.days
+        try:
+            treatment["START_DATE"] = (treatment['start_date_time'] - treatment['date_time']).dt.days
+        except:
+            treatment["START_DATE"] = 0
         treatment["STOP_DATE"] = pd.to_numeric(treatment["START_DATE"], errors='coerce') + (
                     pd.to_numeric(treatment["treatment_duration"].replace("(?i)not provided", "0", regex=True),
                                   errors='coerce') * 30)
