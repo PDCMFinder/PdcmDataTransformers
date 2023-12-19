@@ -900,7 +900,7 @@ def generate_case_lists_script(conf, out_path, study):
 
 def generate_c_bio_portal_files(in_path, out_path, provider):
     # case_script = "/Users/tushar/CancerModels/utils/cbioportal/datahub-study-curation-tools/generate-case-lists/generate_case_lists.py"
-    case_conf = "/Users/tushar/CancerModels/utils/cbioportal/datahub-study-curation-tools/generate-case-lists/case_list_conf.txt"
+    case_conf = "case_list_conf.txt"
     study = provider
     out_path = join(out_path, study)
     if not exists(out_path):
