@@ -690,6 +690,8 @@ def generate_expression_data(path, out_path, platform, study):
         return None
     df["Hugo_Symbol"] = df["symbol"]
     no_fpkm = df['rnaseq_fpkm'].isna().all()
+    if no_fpkm and df['z_score'].isna().all():
+        return None
     datatype = "mrna"
     value_column = "rnaseq_fpkm"
     if no_fpkm:
@@ -932,8 +934,9 @@ if len(sys.argv) > 0:
     home = sys.argv[1] # Path to data
     out_path = sys.argv[2] # output path
     providers = sorted(get_dirs(home))
-
+    skip = ['BROD','CCIA','CHOP','CMP','CRL','CSHL']
     for i in tqdm(range(0, len(providers)),
                   desc="Generating cBioPortal data: "):  ## get_dirs will get the provider dirs in updog
         provider = providers[i]
-        generate_c_bio_portal_files(join(home, provider), out_path, provider)
+        if provider not in skip:
+            generate_c_bio_portal_files(join(home, provider), out_path, provider)
