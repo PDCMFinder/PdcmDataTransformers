@@ -454,7 +454,8 @@ def filter_sample_ids(x, sample_ids):
 
 def filter_samples(df, col, out_path):
     sample_ids = list(pd.read_csv(join(out_path, "data_clinical_sample.txt"), sep="\t")["Sample Identifier"].astype(str))[4:]
-    df = df[df[col].astype(str).apply(lambda x: any(str(val) in x for val in sample_ids))]
+    df[col] = df[col].astype(str)
+    df = df[df[col].apply(lambda x: any(str(val) in x for val in sample_ids))]
     df[col] = df[col].apply(lambda x: filter_sample_ids(x, sample_ids))
     df = df[df[col] != "No match"]
     df = df[df[col].fillna('') != ""]
