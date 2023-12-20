@@ -453,8 +453,8 @@ def filter_sample_ids(x, sample_ids):
 
 
 def filter_samples(df, col, out_path):
-    sample_ids = list(pd.read_csv(join(out_path, "data_clinical_sample.txt"), sep="\t")["Sample Identifier"])[4:]
-    df = df[df[col].apply(lambda x: any(val in x for val in sample_ids))]
+    sample_ids = list(pd.read_csv(join(out_path, "data_clinical_sample.txt"), sep="\t")["Sample Identifier"].astype(str))[4:]
+    df = df[df[col].apply(lambda x: any(str(val) in x for val in sample_ids))]
     df[col] = df[col].apply(lambda x: filter_sample_ids(x, sample_ids))
     df = df[df[col] != "No match"]
     df = df[df[col].fillna('') != ""]
@@ -934,7 +934,9 @@ if len(sys.argv) > 0:
     home = sys.argv[1] # Path to data
     out_path = sys.argv[2] # output path
     providers = sorted(get_dirs(home))
-    skip = ['BROD','CCIA','CHOP','CMP','CRL','CSHL']
+    skip = ['BROD', 'CHOP', 'CRL', 'CUIMC', 'Curie-LC', 'DFCI-CPDM', 'HCI-BCM', 'IRCC-CRC', 'JAX', 'LurieChildrens',
+            'MDAnderson-CCH', 'PDMR', 'CCIA', 'CMP', 'CSHL', 'Curie-BC', 'Curie-OC', 'GCCRI', 'HKU', 'IRCC-GC', 'LIH',
+            'MDAnderson', 'NKI']
     for i in tqdm(range(0, len(providers)),
                   desc="Generating cBioPortal data: "):  ## get_dirs will get the provider dirs in updog
         provider = providers[i]
