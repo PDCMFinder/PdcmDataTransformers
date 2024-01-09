@@ -1,13 +1,14 @@
 # %%
-from os import listdir, getcwd, rename, makedirs, remove
+import sys
+from os import listdir, getcwd, makedirs, remove
 from os.path import isfile, join, isdir, exists
 import re
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-import sys
-import subprocess as sp
-from fuzzywuzzy import process, fuzz
+#import sys
+#import subprocess as sp
+#from fuzzywuzzy import process, fuzz
 
 
 # %% md
@@ -57,9 +58,7 @@ def get_hugo2ncbi():
 # %% md
 ### Generate case lists
 # %%
-import os
-import os.path
-import sys
+
 
 CASE_LIST_CONFIG_HEADER_COLUMNS = ["CASE_LIST_FILENAME", "STAGING_FILENAME", "META_STABLE_ID",
                                    "META_CASE_LIST_CATEGORY", "META_CANCER_STUDY_ID", "META_CASE_LIST_NAME",
@@ -94,8 +93,8 @@ def generate_case_lists(case_list_config_filename, case_list_dir, study_dir, stu
             config_fields = line.split('\t')
             case_list_filename = config_fields[header.index("CASE_LIST_FILENAME")]
             staging_filename_list = config_fields[header.index("STAGING_FILENAME")]
-            case_list_file_full_path = os.path.join(case_list_dir, case_list_filename)
-            if os.path.isfile(case_list_file_full_path) and not overwrite:
+            case_list_file_full_path = join(case_list_dir, case_list_filename)
+            if isfile(case_list_file_full_path) and not overwrite:
                 if verbose:
                     print("LOG: generate_case_lists(), '%s' exists and overwrite is false, skipping caselist..." % (
                         case_list_filename))
@@ -114,7 +113,7 @@ def generate_case_lists(case_list_config_filename, case_list_dir, study_dir, stu
 
             # if this is intersection all staging files must exist
             if intersection_case_list and \
-                    not all([os.path.isfile(os.path.join(study_dir, intersection_filename)) for intersection_filename in
+                    not all([isfile(join(study_dir, intersection_filename)) for intersection_filename in
                              staging_filenames]):
                 continue
 
@@ -172,16 +171,16 @@ def get_case_list_from_staging_file(study_dir, staging_filename, verbose):
 
     # if we are processing mutations data and a SEQUENCED_SAMPLES_FILENAME exists, use it
     if MUTATION_STAGING_GENERAL_PREFIX in staging_filename:
-        sequenced_samples_full_path = os.path.join(study_dir, SEQUENCED_SAMPLES_FILENAME)
-        if os.path.isfile(sequenced_samples_full_path):
+        sequenced_samples_full_path = join(study_dir, SEQUENCED_SAMPLES_FILENAME)
+        if isfile(sequenced_samples_full_path):
             if verbose:
                 print(
                     "LOG: get_case_list_from_staging_file(), '%s' exists, calling get_case_list_from_sequenced_samples_file()" % (
                         SEQUENCED_SAMPLES_FILENAME))
             return get_case_list_from_sequenced_samples_file(sequenced_samples_full_path, verbose)
 
-    staging_file_full_path = os.path.join(study_dir, staging_filename)
-    if not os.path.isfile(staging_file_full_path):
+    staging_file_full_path = join(study_dir, staging_filename)
+    if not isfile(staging_file_full_path):
         return []
 
     # staging file
@@ -292,17 +291,17 @@ def main(case_list_config_filename, case_list_dir, study_dir, study_id, overwrit
         print("LOG: overwrite='%s'" % (overwrite))
         print("LOG: verbose='%s'" % (verbose))
 
-    if not os.path.isfile(case_list_config_filename):
+    if not isfile(case_list_config_filename):
         print("ERROR: case list configuration file '%s' does not exist or is not a file" % (case_list_config_filename),
               file=sys.stderr)
         sys.exit(2)
 
-    if not os.path.isdir(case_list_dir):
+    if not isdir(case_list_dir):
         print("ERROR: case list file directory '%s' does not exist or is not a directory" % (case_list_dir),
               file=sys.stderr)
         sys.exit(2)
 
-    if not os.path.isdir(study_dir):
+    if not isdir(study_dir):
         print("ERROR: study directory '%s' does not exist or is not a directory" % (study_dir), file=sys.stderr)
         sys.exit(2)
 
@@ -937,9 +936,9 @@ if len(sys.argv) > 0:
     providers = sorted(get_dirs(home))
     skip = ['BROD', 'CHOP', 'CRL', 'CUIMC', 'Curie-LC', 'DFCI-CPDM', 'HCI-BCM', 'IRCC-CRC', 'JAX', 'LurieChildrens',
             'MDAnderson-CCH', 'PDMR', 'CCIA', 'CMP', 'CSHL', 'Curie-BC', 'Curie-OC', 'GCCRI', 'HKU', 'IRCC-GC', 'LIH',
-            'MDAnderson', 'NKI']
+            'MDAnderson', 'NKI', 'WCMC']
     for i in tqdm(range(0, len(providers)),
                   desc="Generating cBioPortal data: "):  ## get_dirs will get the provider dirs in updog
         provider = providers[i]
-        if provider not in skip:
-            generate_c_bio_portal_files(join(home, provider), out_path, provider)
+        #if provider not in skip:
+        generate_c_bio_portal_files(join(home, provider), out_path, provider)
