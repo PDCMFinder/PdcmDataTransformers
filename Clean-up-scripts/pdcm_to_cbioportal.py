@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 import sys
-from os import listdir, getcwd, makedirs, remove
+import time
+from os import listdir, makedirs
 from os.path import isfile, join, isdir, exists
 import re
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from time import ctime
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import cpu_count
 
@@ -454,10 +455,16 @@ def read_mol_data(path):
         for dir in dirs:
             files.append(get_files(join(path, dir)))
         files = [item for sublist in files for item in sublist]
-    df = pd.DataFrame()
-    for file in files:
-        temp = pd.read_csv(file, sep="\t")
-        df = pd.concat([df, temp], ignore_index=True)
+    #df = pd.DataFrame()
+    with ThreadPoolExecutor(max_workers=int(cpu_count()/4)) as executor:
+        dfs = list(executor.map(read_metadata_with_fields, files))
+    if len(dfs) != len(files):
+        print('Error reading some files! Re-run the pipeline.')
+        exit()
+    df = pd.concat(dfs, ignore_index=True)
+    #for file in files:
+    #    temp = pd.read_csv(file, sep="\t")
+    #    df = pd.concat([df, temp], ignore_index=True)
     return df
 
 
@@ -503,7 +510,7 @@ class cBioPortal:
         self.mappings = get_mappings(home)
         self.output_dir = output_dir
         self.case_conf = "case_list_conf.txt"
-        self.threads = int(cpu_count() / 2)
+        self.threads = 4
 
     def get_platform(self, type):
         df = self.mms[self.mms["molecular_characterisation_type"] == type]
@@ -919,7 +926,9 @@ class cBioPortal:
         cases.main()
 
     def main(self):
-        for i in tqdm(range(0, len(self.providers)), desc="Generating cBioPortal data: "):
+        print("Generating cBioPortal data: ")
+        for i in range(0, len(self.providers)):
+            print(f"{ctime()}: {self.providers[i]}: {i}/{len(self.providers)}")
             self.generate_c_bio_portal_files(self.providers[i])
 
 
