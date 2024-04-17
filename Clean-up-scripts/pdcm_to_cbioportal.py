@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import sys
-import time
 from os import listdir, makedirs
 from os.path import isfile, join, isdir, exists
 import re
@@ -921,7 +920,6 @@ class cBioPortal:
         if provider != "CRL" and not provider.__contains__("Curie"):
             with ThreadPoolExecutor(max_workers=self.threads) as executor:
                 executor.map(self.generate_molecular_data_files, dt)
-
         cases = cbioportal_case_lists(self.case_conf, self.study_dir, provider, False, False)
         cases.main()
 
