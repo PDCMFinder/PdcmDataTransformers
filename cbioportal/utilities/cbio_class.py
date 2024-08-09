@@ -1,505 +1,13 @@
-#!/usr/bin/env python
-import sys
-from os import listdir, makedirs
-from os.path import isfile, join, isdir, exists
+from os import makedirs
+from os.path import exists
 import re
-import numpy as np
-import pandas as pd
 from time import ctime
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import cpu_count
+from cbio_case_lists import cbioportal_case_lists
+from other import *
 
-
-def get_dirs(path):
-    return [f for f in listdir(path) if isdir(join(path, f))]
-
-
-def get_files(path):
-    return [join(path, f) for f in listdir(path) if isfile(join(path, f)) and f.endswith(".tsv")]
-
-
-def read_metadata_without_fields(path):
-    metadata = pd.read_csv(path, sep='\t', na_values="", low_memory=False)
-    if 'Field' in metadata.columns:
-        metadata = metadata.loc[metadata.Field.str.startswith('#') != True,].reset_index(drop=True)
-        metadata = metadata.drop('Field', axis=1)
-    return metadata
-
-
-def read_metadata_with_fields(path):
-    metadata = pd.read_csv(path, sep='\t', na_values="", low_memory=False)
-    return metadata
-
-
-def sort_case_insensitive(sort_list):
-    return sorted(sort_list, key=str.casefold)
-
-
-def get_hugo2ncbi():
-    hugo2ncbi = pd.read_csv("hugo_to_ncbi.txt", sep='\t')
-    hugo2ncbi["NCBI Gene ID"] = hugo2ncbi["NCBI Gene ID"].fillna(0).astype(int)
-    hugo2ncbi["NCBI Gene ID(supplied by NCBI)"] = hugo2ncbi["NCBI Gene ID(supplied by NCBI)"].fillna(0).astype(int)
-
-    hugo2ncbi["NCBI Gene ID"] = np.where(hugo2ncbi["NCBI Gene ID"] != 0, hugo2ncbi["NCBI Gene ID"],
-                                         hugo2ncbi["NCBI Gene ID(supplied by NCBI)"])
-    hugo2ncbi['RefSeq IDs'] = np.where(hugo2ncbi["RefSeq IDs"].fillna('') != '', hugo2ncbi["RefSeq IDs"],
-                                       hugo2ncbi["RefSeq(supplied by NCBI)"].fillna(''))
-
-    hugo2ncbi = hugo2ncbi[hugo2ncbi["NCBI Gene ID"] != 0]
-    return hugo2ncbi
-
-
-def get_mappings(home):
-    mappings_path = home.replace('data/UPDOG/', '')
-    mappings_path = join(mappings_path, 'mapping/diagnosis_mappings.json')
-    mappings = pd.read_json(mappings_path)[['mappingValues', 'mappedTermLabel']]
-    mappings = pd.concat([mappings, pd.json_normalize(mappings['mappingValues'])], axis=1)
-    mappings = mappings.drop('mappingValues', axis=1).sort_values(by='DataSource').reset_index(drop=True)
-    df = pd.read_json(
-        'https://dev.cancermodels.org/api/model_metadata?select=cancer_system,histology').drop_duplicates().reset_index(
-        drop=True)
-    mappings = mappings.merge(df, left_on='mappedTermLabel', right_on='histology', how='left').fillna('-')
-    return mappings
-
-
-class cbioportal_case_lists:
-    def __init__(self, filename, study_dir, study, overwrite, verbose):
-        self.config_file_name = filename
-        self.case_list_dir = join(study_dir, "case_lists")
-        if not exists(self.case_list_dir):
-            makedirs(self.case_list_dir)
-        self.study_dir = study_dir
-        self.study_id = study
-        self.overwrite = overwrite
-        self.verbose = verbose
-        self.CASE_LIST_CONFIG_HEADER_COLUMNS = ["CASE_LIST_FILENAME", "STAGING_FILENAME", "META_STABLE_ID",
-                                                "META_CASE_LIST_CATEGORY", "META_CANCER_STUDY_ID",
-                                                "META_CASE_LIST_NAME",
-                                                "META_CASE_LIST_DESCRIPTION"]
-        self.CASE_LIST_UNION_DELIMITER = "|"
-        self.CASE_LIST_INTERSECTION_DELIMITER = "&"
-        self.MUTATION_STAGING_GENERAL_PREFIX = "data_mutations"
-        self.SEQUENCED_SAMPLES_FILENAME = "sequenced_samples.txt"
-        self.MUTATION_CASE_LIST_META_HEADER = "sequenced_samples"
-        self.MUTATION_CASE_ID_COLUMN_HEADER = "Tumor_Sample_Barcode"
-        self.SAMPLE_ID_COLUMN_HEADER = "SAMPLE_ID"
-        self.NON_CASE_IDS = frozenset(
-            ["MIRNA", "LOCUS", "ID", "GENE SYMBOL", "ENTREZ_GENE_ID", "HUGO_SYMBOL", "LOCUS ID", "CYTOBAND",
-             "COMPOSITE.ELEMENT.REF", "HYBRIDIZATION REF"])
-        self.CANCER_STUDY_TAG = "<CANCER_STUDY>"
-        self.NUM_CASES_TAG = "<NUM_CASES>"
-
-    def generate_case_lists(self):
-        header = []
-        with open(self.config_file_name, 'r') as case_list_config_file:
-            # get header and validate
-            header = case_list_config_file.readline().rstrip('\n').rstrip('\r').split('\t')
-            # check full header matches what we expect
-            for column in self.CASE_LIST_CONFIG_HEADER_COLUMNS:
-                if column not in header:
-                    print >> sys.stderr, "ERROR: column '%s' is not in '%s'" % (column, self.config_file_name)
-                    sys.exit(2)
-
-            for line in case_list_config_file:
-                line = line.rstrip('\n').rstrip('\r')
-                config_fields = line.split('\t')
-                case_list_filename = config_fields[header.index("CASE_LIST_FILENAME")]
-                staging_filename_list = config_fields[header.index("STAGING_FILENAME")]
-                case_list_file_full_path = join(self.case_list_dir, case_list_filename)
-                if isfile(case_list_file_full_path) and not self.overwrite:
-                    if self.verbose:
-                        print("LOG: generate_case_lists(), '%s' exists and overwrite is false, skipping caselist..." % (
-                            case_list_filename))
-                    continue
-
-                # might be single staging file
-                staging_filenames = []
-                # union (like all cases)
-                union_case_list = self.CASE_LIST_UNION_DELIMITER in staging_filename_list
-                # intersection (like complete or cna-seq)
-                intersection_case_list = self.CASE_LIST_INTERSECTION_DELIMITER in staging_filename_list
-                delimiter = self.CASE_LIST_UNION_DELIMITER if union_case_list else self.CASE_LIST_INTERSECTION_DELIMITER
-                staging_filenames = staging_filename_list.split(delimiter)
-                if self.verbose:
-                    print("LOG: generate_case_lists(), staging filenames: %s" % (",".join(staging_filenames)))
-
-                # if this is intersection all staging files must exist
-                if intersection_case_list and \
-                        not all([isfile(join(self.study_dir, intersection_filename)) for intersection_filename in
-                                 staging_filenames]):
-                    continue
-
-                # this is the set we will pass to write_case_list_file
-                case_set = set([])
-                # this indicates the number of staging files processed -
-                # used to verify that an intersection should be written
-                num_staging_files_processed = 0
-                for staging_filename in staging_filenames:
-                    if self.verbose:
-                        print("LOG: generate_case_lists(), processing staging file '%s'" % (staging_filename))
-                    # compute the case set
-                    case_list = []
-                    case_list = self.get_case_list_from_staging_file(staging_filename)
-
-                    if len(case_list) == 0:
-                        if self.verbose:
-                            print("LOG: generate_case_lists(), no cases in '%s', skipping..." % (staging_filename))
-                        continue
-
-                    if intersection_case_list:
-                        if len(case_set) == 0:
-                            # it is empty so initialize it
-                            case_set = set(case_list)
-                        else:
-                            case_set = case_set.intersection(case_list)
-                    else:
-                        # union of files or single file
-                        case_set = case_set.union(case_list)
-
-                    num_staging_files_processed += 1
-
-                # write case list file (don't make empty case lists)
-                if len(case_set) > 0:
-                    if self.verbose:
-                        print("LOG: generate_case_lists(), calling write_case_list_file()...")
-
-                    # do not write out complete cases file unless we've processed all the files required
-                    if intersection_case_list and num_staging_files_processed != len(staging_filenames):
-                        if self.verbose:
-                            print(
-                                "LOG: generate_case_lists(), number of staging files processed (%d) != number of staging files required (%d) for '%s', skipping call to write_case_list_file()..." % (
-                                    num_staging_files_processed, len(staging_filenames), case_list_filename))
-                    else:
-                        self.write_case_list_file(header, config_fields, case_list_file_full_path, case_set)
-                elif self.verbose:
-                    print(
-                        "LOG: generate_case_lists(), case_set.size() == 0, skipping call to write_case_list_file()...")
-
-    def get_case_list_from_staging_file(self, staging_filename):
-        if self.verbose:
-            print("LOG: get_case_list_from_staging_file(), '%s'" % (staging_filename))
-
-        case_set = set([])
-
-        # if we are processing mutations data and a SEQUENCED_SAMPLES_FILENAME exists, use it
-        if self.MUTATION_STAGING_GENERAL_PREFIX in staging_filename:
-            sequenced_samples_full_path = join(self.study_dir, self.SEQUENCED_SAMPLES_FILENAME)
-            if isfile(sequenced_samples_full_path):
-                if self.verbose:
-                    print(
-                        "LOG: get_case_list_from_staging_file(), '%s' exists, calling get_case_list_from_sequenced_samples_file()" % (
-                            self.SEQUENCED_SAMPLES_FILENAME))
-                return self.get_case_list_from_sequenced_samples_file(sequenced_samples_full_path)
-
-        staging_file_full_path = join(self.study_dir, staging_filename)
-        if not isfile(staging_file_full_path):
-            return []
-
-        # staging file
-        with open(staging_file_full_path, 'r') as staging_file:
-            id_column_index = 0
-            process_header = True
-            for line in staging_file:
-                line = line.rstrip('\n')
-                if line.startswith('#'):
-                    if line.startswith('#' + self.MUTATION_CASE_LIST_META_HEADER + ':'):
-                        # split will split on any whitespace, tabs or any number of consecutive spaces
-                        return line[len(self.MUTATION_CASE_LIST_META_HEADER) + 2:].strip().split()
-                    continue  # this is a comment line, skip it
-                values = line.split('\t')
-
-                # is this the header line?
-                if process_header:
-                    # look for MAF file case id column header
-                    # if this is not a MAF file and header contains the case ids, return here
-                    # we are assuming the header contains the case ids because SAMPLE_ID_COLUMN_HEADER is missing
-                    if self.MUTATION_CASE_ID_COLUMN_HEADER not in values and self.SAMPLE_ID_COLUMN_HEADER not in [
-                        x.upper() for x
-                        in
-                        values]:
-                        if self.verbose:
-                            print(
-                                "LOG: get_case_list_from_staging_file(), this is not a MAF header but has no '%s' column, we assume it contains sample ids..." % (
-                                    self.SAMPLE_ID_COLUMN_HEADER))
-                        for potential_case_id in values:
-                            # check to filter out column headers other than sample ids
-                            if potential_case_id.upper() in self.NON_CASE_IDS:
-                                continue
-                            case_set.add(potential_case_id)
-                        break  # got case ids from header, don't read the rest of the file
-                    else:
-                        # we know at this point one of these columns exists, so no fear of ValueError from index method
-                        id_column_index = values.index(
-                            self.MUTATION_CASE_ID_COLUMN_HEADER) if self.MUTATION_CASE_ID_COLUMN_HEADER in values else [
-                            x.upper()
-                            for
-                            x in
-                            values].index(
-                            self.SAMPLE_ID_COLUMN_HEADER)
-                        if self.verbose:
-                            print(
-                                "LOG: get_case_list_from_staging_file(), this is a MAF or clinical file, samples ids in column with index: %d" % (
-                                    id_column_index))
-                    process_header = False
-                    continue  # done with header, move on to next line
-                case_set.add(values[id_column_index])
-
-        return list(case_set)
-
-    def get_case_list_from_sequenced_samples_file(self, sequenced_samples_full_path):
-        if self.verbose:
-            print("LOG: get_case_list_from_sequenced_samples_file, '%s'", sequenced_samples_full_path)
-
-        case_set = set([])
-        with open(sequenced_samples_full_path, 'r') as sequenced_samples_file:
-            for line in sequenced_samples_file:
-                case_set.add(line.rstrip('\n'))
-
-        if self.verbose:
-            print("LOG: get_case_list_from_sequenced_samples_file, case set size: %d" % (len(case_set)))
-
-        return list(case_set)
-
-    def write_case_list_file(self, case_list_config_header, case_list_config_fields, case_list_full_path, case_set):
-        if self.verbose:
-            print("LOG: write_case_list_file(), '%s'" % (case_list_full_path))
-        with open(case_list_full_path, 'w') as case_list_file:
-            case_list_file.write("cancer_study_identifier: " + self.study_id + "\n")
-            stable_id = case_list_config_fields[case_list_config_header.index("META_STABLE_ID")].replace(
-                self.CANCER_STUDY_TAG,
-                self.study_id)
-            case_list_file.write("stable_id: " + stable_id + "\n")
-            case_list_file.write(
-                "case_list_name: " + case_list_config_fields[
-                    case_list_config_header.index("META_CASE_LIST_NAME")] + "\n")
-            case_list_description = case_list_config_fields[
-                case_list_config_header.index("META_CASE_LIST_DESCRIPTION")].replace(self.NUM_CASES_TAG,
-                                                                                     str(len(case_set)))
-            case_list_file.write("case_list_description: " + case_list_description + "\n")
-            case_list_file.write("case_list_category: " + case_list_config_fields[
-                case_list_config_header.index("META_CASE_LIST_CATEGORY")] + "\n")
-            case_list_file.write("case_list_ids: " + '\t'.join(case_set) + "\n")
-
-    def main(self):
-        if self.verbose:
-            print("LOG: case_list_config_file='%s'" % (self.config_file_name))
-            print("LOG: case_list_dir='%s'" % (self.case_list_dir))
-            print("LOG: study_dir='%s'" % (self.study_dir))
-            print("LOG: study_id='%s'" % (self.study_id))
-            print("LOG: overwrite='%s'" % (self.overwrite))
-            print("LOG: verbose='%s'" % (self.verbose))
-
-        if not isfile(self.config_file_name):
-            print("ERROR: case list configuration file '%s' does not exist or is not a file" % (
-                self.config_file_name),
-                  file=sys.stderr)
-            sys.exit(2)
-
-        if not isdir(self.case_list_dir):
-            print("ERROR: case list file directory '%s' does not exist or is not a directory" % (self.case_list_dir),
-                  file=sys.stderr)
-            sys.exit(2)
-
-        if not isdir(self.study_dir):
-            print("ERROR: study directory '%s' does not exist or is not a directory" % (self.study_dir),
-                  file=sys.stderr)
-            sys.exit(2)
-
-        self.generate_case_lists()
-
-
-def get_provider_description(provider_name):
-    if provider_name == "DFCI-CPDM":
-        return "The Center for Patient Derived Models (CPDM) at Dana-Farber  Cancer Institute (DFCI) is a strategic collaborative research center with the expertise  to generate and characterize patient derived xenografts (PDX), patient derived cell  lines (PDCL - 3D organoid/spheroid and 2D adherent cultures), and acute cell models  drug testing. Through collaboration with major disease groups in the Dana-Farber Cancer Institute, Brigham and Women's Hospital, and Boston Children Hospital Cancer Centers, we have made a large collection of patient derived models of brain tumors, hematologic tumors, and many other solid tumors available to academic and industrial researchers worldwide."
-    df = pd.read_json("https://www.cancermodels.org/api/provider_group?abbreviation=eq." + provider_name)
-    description = str(df["description"][0]).replace("\n\n", " ").replace("\n", " ")
-    if len(description) >= 1024:
-        description = description[0:1020]
-    return description
-
-
-def get_study_cancer_type(provider):
-    cancer_types = {"CCIA": "lymph", "CHOP": "nbl", "Curie-BC": "brca", "Curie-LC": "lung", "Curie-OC": "ovary",
-                    "HCI-BCM": "breast",
-                    "IRCC-CRC": "coadread", "IRCC-GC": "stomach", "LIH": "brain", "MDAnderson-CCH": "os",
-                    "NKI": "brca",
-                    "SANG": "bowel",
-                    "UMCG": "ovary", "UOC-BC": "brca", "UOM-BC": "brca", "VHIO-BC": "brca", "VHIO-CRC": "bowel",
-                    "VHIO-PC": "pancreas"}
-    if provider in cancer_types.keys():
-        return cancer_types[provider]
-    else:
-        return "mixed"
-
-
-def write_clinical_file(df, path, file_type):
-    df.to_csv(join(path, "data_clinical_" + file_type + ".txt"), sep="\t", index=False)
-
-
-def add_headers_clinical_patient():
-    # Column headers - The attribute Display Names: The display name for each clinical attribute
-    column_headers = ["#Patient Identifier", "Sex", "Diagnosis Age", "Overall Survival (Months)",
-                      "Overall Survival Status"]
-    # Column descriptions - The attribute Descriptions: Long(er) description of each clinical attribute
-    column_description = ["#Identifier to uniquely specify a patient.", "Sex",
-                          "Age at which a condition or disease was first diagnosed.",
-                          "Overall survival in months since initial diagonosis.",
-                          "Overall patient survival status."]
-    # Column data type - The attribute Datatype: The datatype of each clinical attribute (must be one of: STRING, NUMBER, BOOLEAN)
-    column_data_type = ["#STRING", "STRING", "NUMBER", "NUMBER", "STRING"]
-    # Column priority - A number which indicates the importance of each attribute. A higher number indicates a higher priority.
-    column_priority = ["#1", "1", "1", "1", "1"]
-    # Column headers for validation
-    column_header_validation = ["PATIENT_ID", "SEX", "AGE", "OS_MONTHS", "OS_STATUS"]
-    return [column_headers, column_description, column_data_type, column_priority, column_header_validation]
-
-
-def add_headers_clinical_sample():
-    # Column headers - The attribute Display Names: The display name for each clinical attribute
-    column_headers = ["#Patient Identifier", "Sample Identifier", 'Sample Origin', 'Passage', "Tumor Type",
-                      "Cancer Type", "Cancer Type Detailed",
-                      "Primary site", "Tumor Grade", "Model type", "Model ID"]
-    # Column descriptions - The attribute Descriptions: Long(er) description of each clinical attribute
-    column_description = ["#Identifier to uniquely specify a patient.", "A unique sample identifier.",
-                          "Sample Origin", 'Passage',
-                          "The type of tumour sample (i.e., normal, primary, met, recurrence).", "Cancer Type",
-                          "Cancer Type Detailed",
-                          "Site of the primary tumor where primary cancer is originating from (may not correspond to the site of the current tissue sample). No abbreviations.",
-                          "The implanded tumour grade value.", "Type of patient derived cancer model",
-                          "Unique identifier for the PDCMs"]
-    # Column data type - The attribute Datatype: The datatype of each clinical attribute (must be one of: STRING, NUMBER, BOOLEAN)
-    column_data_type = ["#STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING",
-                        "STRING", "STRING"]
-    # Column priority - A number which indicates the importance of each attribute. A higher number indicates a higher priority.
-    column_priority = ["#1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1"]
-    # Column headers for validation
-    column_header_validation = ["PATIENT_ID", "SAMPLE_ID", "SAMPLE_ORIGIN", "PASSAGE", "SAMPLE_TYPE", "CANCER_TYPE",
-                                "CANCER_TYPE_DETAILED",
-                                "PRIMARY_SITE", "TUMOR_GRADE", "MODEL_TYPE", "MODEL_ID"]
-    return [column_headers, column_description, column_data_type, column_priority, column_header_validation]
-
-
-def generate_clinical_df(headers):
-    # Generate the df
-    c_bio_data_clinical = pd.DataFrame(columns=headers[0])
-    c_bio_data_clinical.loc[0, :] = headers[1]
-    c_bio_data_clinical.loc[1, :] = headers[2]
-    c_bio_data_clinical.loc[2, :] = headers[3]
-    c_bio_data_clinical.loc[3, :] = headers[4]
-    return c_bio_data_clinical
-
-
-def get_model_type(df, path, provider):
-    pdx, cell = pd.DataFrame(), pd.DataFrame()
-    if exists(join(path, provider + '_metadata-pdx_model.tsv')):
-        pdx = read_metadata_without_fields(join(path, provider + '_metadata-pdx_model.tsv'))
-        pdx['model_type'] = 'PDX'
-        pdx = pdx[['model_id', 'model_type']]
-
-    if exists(join(path, provider + '_metadata-cell_model.tsv')):
-        cell = read_metadata_without_fields(join(path, provider + '_metadata-cell_model.tsv'))[['model_id', 'type']]
-        cell['model_type'] = cell['type']
-        cell = cell[['model_id', 'model_type']]
-    if pdx.shape[0] > 0 and cell.shape[0] > 0:
-        temp = pd.concat([pdx, cell]).reset_index(drop=True)
-    elif pdx.shape[0] > 0 and cell.shape[0] == 0:
-        temp = pdx
-    elif pdx.shape[0] == 0 and cell.shape[0] > 0:
-        temp = cell
-    return df.merge(temp, on='model_id', how='left')
-
-
-def get_samples_mms(df, col, path, provider):
-    df['Sample Origin'] = ''
-    df['Passage'] = ''
-    if not exists(join(path, provider + '_molecular_metadata-sample.tsv')):
-        return df
-    mms = read_metadata_without_fields(join(path, provider + '_molecular_metadata-sample.tsv'))
-    missing_samples = list(set(mms['sample_id'].unique()) - set(df['Sample Identifier'].unique()))
-    missing = mms[mms['sample_id'].isin(missing_samples)][['model_id', 'sample_id', 'sample_origin', 'passage']]
-    missing = missing[missing['sample_origin'].str.lower() != 'patient']
-    missing['Sample Origin'] = missing['sample_origin']
-    missing['Passage'] = missing['passage']
-    temp = missing.merge(df, right_on='Model ID', left_on='model_id', how='left')
-    temp['Sample Identifier'] = temp['sample_id']
-    temp['Sample Origin'] = temp['Sample Origin_x']
-    temp['Passage'] = temp['Passage_x']
-    temp = temp[col]
-    return pd.concat([df, temp]).reset_index(drop=True)[col]
-
-
-def filter_sample_ids(x, sample_ids):
-    out = [val for val in sample_ids if val in x]
-    if len(out) > 0 and out[0] != '':
-        return out[0]
-    else:
-        "No match"
-
-
-def filter_samples(df, col, out_path):
-    sample_ids = list(
-        pd.read_csv(join(out_path, "data_clinical_sample.txt"), sep="\t")["Sample Identifier"].astype(str))[4:]
-    df[col] = df[col].astype(str)
-    df = df[df[col].apply(lambda x: any(str(val) in x for val in sample_ids))]
-    df[col] = df[col].apply(lambda x: filter_sample_ids(x, sample_ids))
-    df = df[df[col] != "No match"]
-    df = df[df[col].fillna('') != ""]
-    return df
-
-
-def read_mol_data(path):
-    files = get_files(path)
-    if len(files) == 0:
-        dirs = get_dirs(path)
-        for dir in dirs:
-            files.append(get_files(join(path, dir)))
-        files = [item for sublist in files for item in sublist]
-    #df = pd.DataFrame()
-    with ThreadPoolExecutor(max_workers=int(cpu_count()/4)) as executor:
-        dfs = list(executor.map(read_metadata_with_fields, files))
-    if len(dfs) != len(files):
-        print('Error reading some files! Re-run the pipeline.')
-        exit()
-    df = pd.concat(dfs, ignore_index=True)
-    #for file in files:
-    #    temp = pd.read_csv(file, sep="\t")
-    #    df = pd.concat([df, temp], ignore_index=True)
-    return df
-
-
-def map_gene_symbol_to_id(symbol):
-    # Check if the symbol is in the reference DataFrame
-    if symbol in reference_df['Approved symbol'].tolist():
-        return reference_df.loc[reference_df['Approved symbol'] == symbol, 'NCBI Gene ID'].values[0]
-    # Check if the symbol is in the 'previous' column
-    elif reference_df['Previous symbols'].str.contains(symbol, na=False).any():
-        return reference_df.loc[reference_df['Previous symbols'].str.contains(symbol, na=False), 'NCBI Gene ID'].values[
-            0]
-    # Check if the symbol is in the 'alias' column
-    elif reference_df['Alias symbols'].str.contains(symbol, na=False).any():
-        return reference_df.loc[reference_df['Alias symbols'].str.contains(symbol, na=False), 'NCBI Gene ID'].values[0]
-    else:
-        return ""
-
-
-def map_id_to_hugo(id, symbol):
-    if id == "":
-        return symbol
-    return reference_df.loc[reference_df['NCBI Gene ID'] == id, 'Approved symbol'].values[0]
-
-
-def handle_frameshift(row):
-    if not row["Consequence"].__contains__("frameshift"):
-        return row
-    variant = row["variant_class"]
-    if variant.__contains__("frameshift"):
-        if row["coding_sequence_change"].__contains__("ins"):
-            variant = "insertion"
-        elif row["coding_sequence_change"].__contains__("del"):
-            variant = "deletion"
-    row["Consequence"] = "frameshift_variation_" + variant
-    return row
-
+reference_df = get_hugo2ncbi()
 
 class cBioPortal:
     def __init__(self, home, output_dir):
@@ -930,13 +438,198 @@ class cBioPortal:
             self.generate_c_bio_portal_files(self.providers[i])
 
 
-reference_df = get_hugo2ncbi()
+
+def get_provider_description(provider_name):
+    if provider_name == "DFCI-CPDM":
+        return "The Center for Patient Derived Models (CPDM) at Dana-Farber  Cancer Institute (DFCI) is a strategic collaborative research center with the expertise  to generate and characterize patient derived xenografts (PDX), patient derived cell  lines (PDCL - 3D organoid/spheroid and 2D adherent cultures), and acute cell models  drug testing. Through collaboration with major disease groups in the Dana-Farber Cancer Institute, Brigham and Women's Hospital, and Boston Children Hospital Cancer Centers, we have made a large collection of patient derived models of brain tumors, hematologic tumors, and many other solid tumors available to academic and industrial researchers worldwide."
+    df = pd.read_json("https://www.cancermodels.org/api/provider_group?abbreviation=eq." + provider_name)
+    description = str(df["description"][0]).replace("\n\n", " ").replace("\n", " ")
+    if len(description) >= 1024:
+        description = description[0:1020]
+    return description
 
 
-def run(args):
-    # Path to data # output path
-    cBioPortal(args[1], args[2]).main()
+def get_study_cancer_type(provider):
+    cancer_types = {"CCIA": "lymph", "CHOP": "nbl", "Curie-BC": "brca", "Curie-LC": "lung", "Curie-OC": "ovary",
+                    "HCI-BCM": "breast",
+                    "IRCC-CRC": "coadread", "IRCC-GC": "stomach", "LIH": "brain", "MDAnderson-CCH": "os",
+                    "NKI": "brca",
+                    "SANG": "bowel",
+                    "UMCG": "ovary", "UOC-BC": "brca", "UOM-BC": "brca", "VHIO-BC": "brca", "VHIO-CRC": "bowel",
+                    "VHIO-PC": "pancreas"}
+    if provider in cancer_types.keys():
+        return cancer_types[provider]
+    else:
+        return "mixed"
 
 
-if len(sys.argv) > 0:
-    run(sys.argv)
+def write_clinical_file(df, path, file_type):
+    df.to_csv(join(path, "data_clinical_" + file_type + ".txt"), sep="\t", index=False)
+
+
+def add_headers_clinical_patient():
+    # Column headers - The attribute Display Names: The display name for each clinical attribute
+    column_headers = ["#Patient Identifier", "Sex", "Diagnosis Age", "Overall Survival (Months)",
+                      "Overall Survival Status"]
+    # Column descriptions - The attribute Descriptions: Long(er) description of each clinical attribute
+    column_description = ["#Identifier to uniquely specify a patient.", "Sex",
+                          "Age at which a condition or disease was first diagnosed.",
+                          "Overall survival in months since initial diagonosis.",
+                          "Overall patient survival status."]
+    # Column data type - The attribute Datatype: The datatype of each clinical attribute (must be one of: STRING, NUMBER, BOOLEAN)
+    column_data_type = ["#STRING", "STRING", "NUMBER", "NUMBER", "STRING"]
+    # Column priority - A number which indicates the importance of each attribute. A higher number indicates a higher priority.
+    column_priority = ["#1", "1", "1", "1", "1"]
+    # Column headers for validation
+    column_header_validation = ["PATIENT_ID", "SEX", "AGE", "OS_MONTHS", "OS_STATUS"]
+    return [column_headers, column_description, column_data_type, column_priority, column_header_validation]
+
+
+def add_headers_clinical_sample():
+    # Column headers - The attribute Display Names: The display name for each clinical attribute
+    column_headers = ["#Patient Identifier", "Sample Identifier", 'Sample Origin', 'Passage', "Tumor Type",
+                      "Cancer Type", "Cancer Type Detailed",
+                      "Primary site", "Tumor Grade", "Model type", "Model ID"]
+    # Column descriptions - The attribute Descriptions: Long(er) description of each clinical attribute
+    column_description = ["#Identifier to uniquely specify a patient.", "A unique sample identifier.",
+                          "Sample Origin", 'Passage',
+                          "The type of tumour sample (i.e., normal, primary, met, recurrence).", "Cancer Type",
+                          "Cancer Type Detailed",
+                          "Site of the primary tumor where primary cancer is originating from (may not correspond to the site of the current tissue sample). No abbreviations.",
+                          "The implanded tumour grade value.", "Type of patient derived cancer model",
+                          "Unique identifier for the PDCMs"]
+    # Column data type - The attribute Datatype: The datatype of each clinical attribute (must be one of: STRING, NUMBER, BOOLEAN)
+    column_data_type = ["#STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING",
+                        "STRING", "STRING"]
+    # Column priority - A number which indicates the importance of each attribute. A higher number indicates a higher priority.
+    column_priority = ["#1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1"]
+    # Column headers for validation
+    column_header_validation = ["PATIENT_ID", "SAMPLE_ID", "SAMPLE_ORIGIN", "PASSAGE", "SAMPLE_TYPE", "CANCER_TYPE",
+                                "CANCER_TYPE_DETAILED",
+                                "PRIMARY_SITE", "TUMOR_GRADE", "MODEL_TYPE", "MODEL_ID"]
+    return [column_headers, column_description, column_data_type, column_priority, column_header_validation]
+
+
+def generate_clinical_df(headers):
+    # Generate the df
+    c_bio_data_clinical = pd.DataFrame(columns=headers[0])
+    c_bio_data_clinical.loc[0, :] = headers[1]
+    c_bio_data_clinical.loc[1, :] = headers[2]
+    c_bio_data_clinical.loc[2, :] = headers[3]
+    c_bio_data_clinical.loc[3, :] = headers[4]
+    return c_bio_data_clinical
+
+
+def get_model_type(df, path, provider):
+    pdx, cell = pd.DataFrame(), pd.DataFrame()
+    if exists(join(path, provider + '_metadata-pdx_model.tsv')):
+        pdx = read_metadata_without_fields(join(path, provider + '_metadata-pdx_model.tsv'))
+        pdx['model_type'] = 'PDX'
+        pdx = pdx[['model_id', 'model_type']]
+
+    if exists(join(path, provider + '_metadata-cell_model.tsv')):
+        cell = read_metadata_without_fields(join(path, provider + '_metadata-cell_model.tsv'))[['model_id', 'type']]
+        cell['model_type'] = cell['type']
+        cell = cell[['model_id', 'model_type']]
+    if pdx.shape[0] > 0 and cell.shape[0] > 0:
+        temp = pd.concat([pdx, cell]).reset_index(drop=True)
+    elif pdx.shape[0] > 0 and cell.shape[0] == 0:
+        temp = pdx
+    elif pdx.shape[0] == 0 and cell.shape[0] > 0:
+        temp = cell
+    return df.merge(temp, on='model_id', how='left')
+
+
+def get_samples_mms(df, col, path, provider):
+    df['Sample Origin'] = ''
+    df['Passage'] = ''
+    if not exists(join(path, provider + '_molecular_metadata-sample.tsv')):
+        return df
+    mms = read_metadata_without_fields(join(path, provider + '_molecular_metadata-sample.tsv'))
+    missing_samples = list(set(mms['sample_id'].unique()) - set(df['Sample Identifier'].unique()))
+    missing = mms[mms['sample_id'].isin(missing_samples)][['model_id', 'sample_id', 'sample_origin', 'passage']]
+    missing = missing[missing['sample_origin'].str.lower() != 'patient']
+    missing['Sample Origin'] = missing['sample_origin']
+    missing['Passage'] = missing['passage']
+    temp = missing.merge(df, right_on='Model ID', left_on='model_id', how='left')
+    temp['Sample Identifier'] = temp['sample_id']
+    temp['Sample Origin'] = temp['Sample Origin_x']
+    temp['Passage'] = temp['Passage_x']
+    temp = temp[col]
+    return pd.concat([df, temp]).reset_index(drop=True)[col]
+
+
+def filter_sample_ids(x, sample_ids):
+    out = [val for val in sample_ids if val in x]
+    if len(out) > 0 and out[0] != '':
+        return out[0]
+    else:
+        "No match"
+
+
+def filter_samples(df, col, out_path):
+    sample_ids = list(
+        pd.read_csv(join(out_path, "data_clinical_sample.txt"), sep="\t")["Sample Identifier"].astype(str))[4:]
+    df[col] = df[col].astype(str)
+    df = df[df[col].apply(lambda x: any(str(val) in x for val in sample_ids))]
+    df[col] = df[col].apply(lambda x: filter_sample_ids(x, sample_ids))
+    df = df[df[col] != "No match"]
+    df = df[df[col].fillna('') != ""]
+    return df
+
+
+def read_mol_data(path):
+    files = get_files(path)
+    if len(files) == 0:
+        dirs = get_dirs(path)
+        for dir in dirs:
+            files.append(get_files(join(path, dir)))
+        files = [item for sublist in files for item in sublist]
+    #df = pd.DataFrame()
+    with ThreadPoolExecutor(max_workers=int(cpu_count()/4)) as executor:
+        dfs = list(executor.map(read_metadata_with_fields, files))
+    if len(dfs) != len(files):
+        print('Error reading some files! Re-run the pipeline.')
+        exit()
+    df = pd.concat(dfs, ignore_index=True)
+    #for file in files:
+    #    temp = pd.read_csv(file, sep="\t")
+    #    df = pd.concat([df, temp], ignore_index=True)
+    return df
+
+
+def map_gene_symbol_to_id(symbol):
+    # Check if the symbol is in the reference DataFrame
+    if symbol in reference_df['Approved symbol'].tolist():
+        return reference_df.loc[reference_df['Approved symbol'] == symbol, 'NCBI Gene ID'].values[0]
+    # Check if the symbol is in the 'previous' column
+    elif reference_df['Previous symbols'].str.contains(symbol, na=False).any():
+        return reference_df.loc[reference_df['Previous symbols'].str.contains(symbol, na=False), 'NCBI Gene ID'].values[
+            0]
+    # Check if the symbol is in the 'alias' column
+    elif reference_df['Alias symbols'].str.contains(symbol, na=False).any():
+        return reference_df.loc[reference_df['Alias symbols'].str.contains(symbol, na=False), 'NCBI Gene ID'].values[0]
+    else:
+        return ""
+
+
+def map_id_to_hugo(id, symbol):
+    if id == "":
+        return symbol
+    return reference_df.loc[reference_df['NCBI Gene ID'] == id, 'Approved symbol'].values[0]
+
+
+def handle_frameshift(row):
+    if not row["Consequence"].__contains__("frameshift"):
+        return row
+    variant = row["variant_class"]
+    if variant.__contains__("frameshift"):
+        if row["coding_sequence_change"].__contains__("ins"):
+            variant = "insertion"
+        elif row["coding_sequence_change"].__contains__("del"):
+            variant = "deletion"
+    row["Consequence"] = "frameshift_variation_" + variant
+    return row
+
+
+

@@ -4,10 +4,20 @@ import pandas as pd
 from tqdm import tqdm
 import requests
 from random import randint
+import numpy as np
+
 
 geneSymbol_location = pd.read_csv("/Users/tushar/CancerModels/utils/PdcmDataTransformers/resources/genes.tsv", sep='\t')
 home = "/Users/tushar/CancerModels/pdxfinder-data/data/UPDOG/"
-templates = "/Users/tushar/CancerModels/pdxfinder-data/templates/active_templates"
+templates = "/Users/tushar/CancerModels/pdxfinder-data/template/active_templates"
+
+# Define a function to convert log2 ratio to fold change
+def log2_to_fold_change(log2_ratio):
+    return 2 ** log2_ratio
+
+# Define a function to convert log2 ratio to log10 ratio
+def log2_to_log10(log2_ratio):
+    return log2_ratio / np.log10(2)
 
 def request(link, flag, req_type):
     success_quotes = {0: 'May the force be with you! ',
@@ -130,8 +140,6 @@ def get_location_from_synonym(row):
             match = match.iloc[:1]
         if len(match) > 0:
             row['chromosome'], row['strand'], row['seq_start_position'], row['seq_end_position'], row['ncbi_gene_id'], row['ensembl_gene_id'] = match['chromosome'][0], match['strand'][0], match['start'][0], match['end'][0], match['GeneID'][0], match['ensembl_id'][0]
-        else:
-            print(symbol)
     return row
 
 def get_geneSymbol_locations(paths):
@@ -182,3 +190,19 @@ def merged_metadata(path):
         elif f.__contains__('sharing.tsv'):
             data.append(metadata)
     return data
+
+
+def generate_pdcm_sheet(df, path, provider, sheet_name):
+    sheet_path = join(templates, 'metadata', f'metadata_template-{sheet_name}.tsv')
+    sheet = read_metadata_with_fields(sheet_path)
+    for col in sheet.columns:
+        if col not in df.columns:
+            df[col] = ''
+    temp = pd.concat([sheet, df[sheet.columns]])
+    temp.to_csv(join(path, f'{provider}_metadata-{sheet_name}.tsv'), sep='\t', index=False)
+
+def input_to_pdcm(df, out_path, provider):
+    df['Field'] = ''
+    sheets = ['patient', 'patient_sample', 'model_validation', 'pdx_model', 'cell_model', 'sharing']
+    for sheet in sheets:
+        generate_pdcm_sheet(df, out_path, provider, sheet)
