@@ -61,7 +61,7 @@ def get_files(path):
 
 
 def read_metadata_without_fields(path):
-    metadata = pd.read_csv(path, sep='\t', na_values="", low_memory=False)
+    metadata = pd.read_csv(path, sep='\t', na_values="", low_memory=False, encoding='utf-8', encoding_errors='replace')
     if 'Field' in metadata.columns:
         metadata = metadata.loc[metadata.Field.astype(str).str.startswith('#') != True,].reset_index(drop=True)
         metadata = metadata.drop('Field', axis=1)
@@ -69,7 +69,7 @@ def read_metadata_without_fields(path):
 
 
 def read_metadata_with_fields(path):
-    metadata = pd.read_csv(path, sep='\t', na_values="", low_memory=False)
+    metadata = pd.read_csv(path, sep='\t', na_values="", low_memory=False, encoding='utf-8', encoding_errors='replace')
     return metadata
 
 
