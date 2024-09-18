@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from datetime import datetime
 from Bio import Entrez
+from tqdm import tqdm
 
 
 def fetch_title_and_date(email, pmid):
@@ -58,8 +59,9 @@ class get_citations():
         self.all_pmids = list(set(df['pubmed_id']))[1:]
 
     def generate_result_dict(self, pmid):
-        title, pub_date = fetch_title_and_date(pmid)
-        citing_pmids = fetch_citing_pmids(pmid)
+        print(f"{self.all_pmids.index(pmid)}")
+        title, pub_date = fetch_title_and_date(self.email, pmid)
+        citing_pmids = fetch_citing_pmids(self.email, pmid)
 
         # Filter out PMIDs that are already in the DataFrame
         filtered_citing_pmids = [citing_pmid for citing_pmid in citing_pmids if citing_pmid not in self.all_pmids]
@@ -69,7 +71,7 @@ class get_citations():
         for citing_pmid in filtered_citing_pmids:
             if citing_pmid not in self.citations:
                 self.citations.append(citing_pmid)
-                _, citing_pub_date = fetch_title_and_date(citing_pmid)
+                _, citing_pub_date = fetch_title_and_date(self.email, citing_pmid)
                 if citing_pub_date and citing_pub_date > self.filter_date:
                     citing_after_filter.append(citing_pmid)
 
@@ -86,8 +88,10 @@ class get_citations():
 
     def get_citations_for_cm(self):
         self.get_cm_metadata()
-        with ThreadPoolExecutor(max_workers=self.cpu_count) as executor:
-            executor.map(self.generate_result_dict, self.all_pmids)
+        for i in tqdm(self.all_pmids):
+            self.generate_result_dict(i)
+        #with ThreadPoolExecutor(max_workers=self.cpu_count) as executor:
+        #    executor.map(self.generate_result_dict, self.all_pmids)
         if len(self.results) > 0:
             results_df = pd.DataFrame(self.results)
             results_df.to_csv('/hps/nobackup/tudor/pdcm/annotation-data/citations_updated_old.csv', index=False)
