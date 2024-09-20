@@ -5,6 +5,42 @@ from datetime import datetime
 from Bio import Entrez
 from tqdm import tqdm
 
+import requests
+import xml.etree.ElementTree as ET
+
+
+# Function to fetch and process full text XML from Europe PMC and check for multiple model IDs
+def fetch_and_search_models_in_full_text(pmc_id, model_ids):
+    # Construct the Europe PMC full-text XML URL
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmc_id}/fullTextXML"
+
+    try:
+        # Fetch the XML content from Europe PMC
+        response = requests.get(url)
+        response.raise_for_status()  # Raise error if the request fails
+
+        # Parse the XML content
+        root = ET.fromstring(response.content)
+
+        # Find the <body> tag where the full text is located
+        body_text = ""
+        for body in root.findall('.//body'):
+            # Extract all text within the body tag
+            body_text = ET.tostring(body, encoding='utf8', method='text').decode('utf8')
+
+        # Check if any model ID is mentioned in the full text
+        for model_id in model_ids:
+            if model_id in body_text:
+                print(f"Model ID {model_id} found in full text of {pmc_id}.")
+                return True
+
+        print(f"None of the model IDs were found in full text of {pmc_id}.")
+        return False
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching full text for PMC ID {pmc_id}: {e}")
+        return False
+
 
 def fetch_title_and_date(email, pmid):
     Entrez.email = email  # Always provide an email for NCBI API
@@ -48,18 +84,20 @@ class get_citations():
         # Set the filter date as April 1st, 2022
         self.filter_date = datetime(2022, 4, 1)
 
-
     def get_cm_metadata(self):
         model_publications = pd.read_json("https://www.cancermodels.org/api/model_information?publication_group_id=not.is.null")
         publication_id = pd.read_json("https://www.cancermodels.org/api/publication_group")
         model_publications = model_publications[['external_model_id', 'type', 'data_source', 'publication_group_id']].merge(publication_id, how='left', left_on='publication_group_id', right_on='id')
+        df = model_publications[['external_model_id', 'data_source', 'pubmed_ids']].drop_duplicates()
+        df = df.assign(pubmed_id=df['pubmed_ids'].str.replace(', ', ',').str.split(',')).explode('pubmed_id')
+        df['pubmed_id'] = df['pubmed_id'].str.strip().str.replace('PMID: ', '').str.replace('PMID:', '')
+        self.pmid_and_model_id = df.groupby('pubmed_id')['external_model_id'].agg(list).to_dict()
         df = model_publications[['data_source', 'pubmed_ids']].drop_duplicates()
         df = df.assign(pubmed_id=df['pubmed_ids'].str.replace(', ', ',').str.split(',')).explode('pubmed_id')
         df['pubmed_id'] = df['pubmed_id'].str.strip().str.replace('PMID: ', '').str.replace('PMID:', '')
         self.all_pmids = list(set(df['pubmed_id']))[1:]
 
     def generate_result_dict(self, pmid):
-        print(f"{self.all_pmids.index(pmid)}")
         title, pub_date = fetch_title_and_date(self.email, pmid)
         citing_pmids = fetch_citing_pmids(self.email, pmid)
 
@@ -67,6 +105,7 @@ class get_citations():
         filtered_citing_pmids = [citing_pmid for citing_pmid in citing_pmids if citing_pmid not in self.all_pmids]
 
         # Check publication date of each citing PMID
+        model_in_cpmid = []
         citing_after_filter = []
         for citing_pmid in filtered_citing_pmids:
             if citing_pmid not in self.citations:
@@ -74,6 +113,7 @@ class get_citations():
                 _, citing_pub_date = fetch_title_and_date(self.email, citing_pmid)
                 if citing_pub_date and citing_pub_date > self.filter_date:
                     citing_after_filter.append(citing_pmid)
+                    model_in_cpmid.append({citing_pmid:fetch_and_search_models_in_full_text(citing_pmid, self.pmid_and_model_id[pmid])})
 
         # Remove duplicates within the list
         citing_after_filter = list(set(citing_after_filter))
@@ -83,23 +123,26 @@ class get_citations():
             'pubmed_id': pmid,
             'title': title,
             'cited_pmids': citing_after_filter,
-            'citation_count': len(citing_after_filter)
+            'citation_count': len(citing_after_filter),
+            'model_id_in_cited_pmid_dict': model_in_cpmid,
+            'model_id_in_cited_pmid': [m.keys()[0] for m in model_in_cpmid if m.values()[0]]
         })
 
     def get_citations_for_cm(self):
         self.get_cm_metadata()
         for i in tqdm(self.all_pmids):
             self.generate_result_dict(i)
+            break
         #with ThreadPoolExecutor(max_workers=self.cpu_count) as executor:
         #    executor.map(self.generate_result_dict, self.all_pmids)
         if len(self.results) > 0:
             results_df = pd.DataFrame(self.results)
-            results_df.to_csv('/hps/nobackup/tudor/pdcm/annotation-data/citations_updated_old.csv', index=False)
+            results_df.to_csv('/hps/nobackup/tudor/pdcm/annotation-data/citations_with_ts_old.csv', index=False)
             results_df['cited_pmids'] = results_df['cited_pmids'].apply(lambda x: list(set(x)))
             all_cited_pmids = set(pm for sublist in results_df['cited_pmids'] for pm in sublist)
             results_df['unique_citations'] = results_df['cited_pmids'].apply(lambda x: list(set(x) & all_cited_pmids))
             results_df['unique_citation_count'] = results_df['unique_citations'].apply(len)
-            results_df.to_csv('/hps/nobackup/tudor/pdcm/annotation-data/citations_updated.csv', index=False)
+            results_df.to_csv('/hps/nobackup/tudor/pdcm/annotation-data/citations__with_ts.csv', index=False)
 
 
 get_citations().get_citations_for_cm()
