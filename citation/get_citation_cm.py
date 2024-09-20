@@ -161,7 +161,6 @@ class get_citations():
         self.get_cm_metadata()
         for i in tqdm(self.all_pmids):
             self.generate_result_dict(i)
-            break
         #with ThreadPoolExecutor(max_workers=self.cpu_count) as executor:
         #    executor.map(self.generate_result_dict, self.all_pmids)
         if len(self.results) > 0:
