@@ -166,7 +166,7 @@ class get_citations():
         #    executor.map(self.generate_result_dict, self.all_pmids)
         if len(self.results) > 0:
             results_df = pd.DataFrame(self.results)
-            codon_dir = ""#"/hps/nobackup/tudor/pdcm/annotation-data/"
+            codon_dir = "/hps/nobackup/tudor/pdcm/annotation-data/"
             results_df.to_csv(codon_dir+'citations_with_ts_old.csv', index=False)
             results_df['cited_pmids'] = results_df['cited_pmids'].apply(lambda x: list(set(x)))
             all_cited_pmids = set(pm for sublist in results_df['cited_pmids'] for pm in sublist)
