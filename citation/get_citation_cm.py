@@ -9,9 +9,37 @@ import requests
 import xml.etree.ElementTree as ET
 
 
+def get_pmcid_from_pmid(pmid):
+    """
+    Function to get PMCID from a given PubMed ID (PMID) using Europe PMC API.
+
+    Args:
+    pmid (str or int): The PubMed ID for which you want to retrieve the PMCID.
+
+    Returns:
+    pmcid (str): The corresponding PMCID, or None if no PMCID is found.
+    """
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:{pmid}&format=json"
+
+    try:
+        response = requests.get(url)
+        data = response.json()
+
+        # Check if the result exists and has a PMCID
+        if data["hitCount"] > 0 and "pmcid" in data["resultList"]["result"][0]:
+            return data["resultList"]["result"][0]["pmcid"]
+        else:
+            return None  # No PMCID found
+    except Exception as e:
+        print(f"Error fetching PMCID for PMID {pmid}: {e}")
+        return None
+
 # Function to fetch and process full text XML from Europe PMC and check for multiple model IDs
-def fetch_and_search_models_in_full_text(pmc_id, model_ids):
+def fetch_and_search_models_in_full_text(pm_id, model_ids):
     # Construct the Europe PMC full-text XML URL
+    pmc_id = get_pmcid_from_pmid(pm_id)
+    if pmc_id is None:
+        return False
     url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmc_id}/fullTextXML"
 
     try:
@@ -95,7 +123,7 @@ class get_citations():
         df = model_publications[['data_source', 'pubmed_ids']].drop_duplicates()
         df = df.assign(pubmed_id=df['pubmed_ids'].str.replace(', ', ',').str.split(',')).explode('pubmed_id')
         df['pubmed_id'] = df['pubmed_id'].str.strip().str.replace('PMID: ', '').str.replace('PMID:', '')
-        self.all_pmids = list(set(df['pubmed_id']))[1:]
+        self.all_pmids = [l for l in list(set(df['pubmed_id'])) if l != '']
 
     def generate_result_dict(self, pmid):
         title, pub_date = fetch_title_and_date(self.email, pmid)
@@ -125,7 +153,8 @@ class get_citations():
             'cited_pmids': citing_after_filter,
             'citation_count': len(citing_after_filter),
             'model_id_in_cited_pmid_dict': model_in_cpmid,
-            'model_id_in_cited_pmid': [m.keys()[0] for m in model_in_cpmid if m.values()[0]]
+            'model_id_in_cited_pmid': [pubmed_id for d in model_in_cpmid for pubmed_id, value in d.items() if value],
+            'model_id_associated': self.pmid_and_model_id[pmid]
         })
 
     def get_citations_for_cm(self):
@@ -137,12 +166,13 @@ class get_citations():
         #    executor.map(self.generate_result_dict, self.all_pmids)
         if len(self.results) > 0:
             results_df = pd.DataFrame(self.results)
-            results_df.to_csv('/hps/nobackup/tudor/pdcm/annotation-data/citations_with_ts_old.csv', index=False)
+            codon_dir = ""#"/hps/nobackup/tudor/pdcm/annotation-data/"
+            results_df.to_csv(codon_dir+'citations_with_ts_old.csv', index=False)
             results_df['cited_pmids'] = results_df['cited_pmids'].apply(lambda x: list(set(x)))
             all_cited_pmids = set(pm for sublist in results_df['cited_pmids'] for pm in sublist)
             results_df['unique_citations'] = results_df['cited_pmids'].apply(lambda x: list(set(x) & all_cited_pmids))
             results_df['unique_citation_count'] = results_df['unique_citations'].apply(len)
-            results_df.to_csv('/hps/nobackup/tudor/pdcm/annotation-data/citations__with_ts.csv', index=False)
+            results_df.to_csv(codon_dir+'citations_with_ts.csv', index=False)
 
 
 get_citations().get_citations_for_cm()
