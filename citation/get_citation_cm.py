@@ -8,6 +8,48 @@ from tqdm import tqdm
 import requests
 import xml.etree.ElementTree as ET
 
+import requests
+import xml.etree.ElementTree as ET
+import re
+
+
+# Function to fetch full text XML and find the sentence containing the citation
+def fetch_and_find_citation_sentence(pmc_id, cited_pmid):
+    # Construct the URL to fetch the full text XML
+    pmc_id = get_pmcid_from_pmid(pmc_id)
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmc_id}/fullTextXML"
+
+    try:
+        # Fetch the XML content from Europe PMC
+        response = requests.get(url)
+        response.raise_for_status()  # Check for request errors
+
+        # Parse the XML content
+        root = ET.fromstring(response.content)
+
+        # Find all <xref> tags which usually contain citation information
+        body_text = ""
+        for body in root.findall('.//body'):
+            body_text = ET.tostring(body, encoding='utf8', method='text').decode('utf8')
+
+        # Create a pattern to search for the PMID (in citation format, e.g., [PMID:12345678])
+        pattern = re.compile(rf"\[PMID:{cited_pmid}\]")
+
+        # Split the body text into sentences
+        sentences = re.split(r'(?<=[.!?]) +', body_text)
+
+        # Search each sentence for the PMID
+        for sentence in sentences:
+            if pattern.search(sentence):
+                return sentence.strip()  # Return the sentence containing the citation
+
+        # If no sentence is found with the PMID
+        return f"No sentence found with PMID {cited_pmid} in the citing article."
+
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching full text for PMC ID {pmc_id}: {e}"
+
+
 
 def get_pmcid_from_pmid(pmid):
     """
@@ -141,7 +183,7 @@ class get_citations():
                 _, citing_pub_date = fetch_title_and_date(self.email, citing_pmid)
                 if citing_pub_date and citing_pub_date > self.filter_date:
                     citing_after_filter.append(citing_pmid)
-                    model_in_cpmid.append({citing_pmid:fetch_and_search_models_in_full_text(citing_pmid, self.pmid_and_model_id[pmid])})
+                    model_in_cpmid.append({citing_pmid: fetch_and_find_citation_sentence(citing_pmid, pmid)})
 
         # Remove duplicates within the list
         citing_after_filter = list(set(citing_after_filter))
@@ -152,9 +194,7 @@ class get_citations():
             'title': title,
             'cited_pmids': citing_after_filter,
             'citation_count': len(citing_after_filter),
-            'model_id_in_cited_pmid_dict': model_in_cpmid,
-            'model_id_in_cited_pmid': [pubmed_id for d in model_in_cpmid for pubmed_id, value in d.items() if value],
-            'model_id_associated': self.pmid_and_model_id[pmid]
+            'cited_mention_text': model_in_cpmid,
         })
 
     def get_citations_for_cm(self):
@@ -166,12 +206,12 @@ class get_citations():
         if len(self.results) > 0:
             results_df = pd.DataFrame(self.results)
             codon_dir = "/hps/nobackup/tudor/pdcm/annotation-data/"
-            results_df.to_csv(codon_dir+'citations_with_ts_old.csv', index=False)
-            results_df['cited_pmids'] = results_df['cited_pmids'].apply(lambda x: list(set(x)))
-            all_cited_pmids = set(pm for sublist in results_df['cited_pmids'] for pm in sublist)
-            results_df['unique_citations'] = results_df['cited_pmids'].apply(lambda x: list(set(x) & all_cited_pmids))
-            results_df['unique_citation_count'] = results_df['unique_citations'].apply(len)
-            results_df.to_csv(codon_dir+'citations_with_ts.csv', index=False)
+            results_df.to_csv(codon_dir+'citations_with_mentioned_lines.csv', index=False)
+            #results_df['cited_pmids'] = results_df['cited_pmids'].apply(lambda x: list(set(x)))
+            #all_cited_pmids = set(pm for sublist in results_df['cited_pmids'] for pm in sublist)
+            #results_df['unique_citations'] = results_df['cited_pmids'].apply(lambda x: list(set(x) & all_cited_pmids))
+            #results_df['unique_citation_count'] = results_df['unique_citations'].apply(len)
+            #results_df.to_csv(codon_dir+'citations_with_ts.csv', index=False)
 
 
 get_citations().get_citations_for_cm()
