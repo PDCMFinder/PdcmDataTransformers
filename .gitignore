@@ -1,5 +1,6 @@
 .DS_Store
 .idea
 .ipynb_checkpoints
+cbioportal/cbioportal_data
 *biospecimen.xml
 *homo_sapiens.json

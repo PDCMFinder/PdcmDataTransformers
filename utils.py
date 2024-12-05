@@ -206,3 +206,15 @@ def input_to_pdcm(df, out_path, provider):
     sheets = ['patient', 'patient_sample', 'model_validation', 'pdx_model', 'cell_model', 'sharing']
     for sheet in sheets:
         generate_pdcm_sheet(df, out_path, provider, sheet)
+
+def pmid2pmcid(pid):
+    url = f"https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=my_tool&email=my_email@example.com&ids={pid}&format=json"
+    response = requests.get(url)
+    if response.status_code == 200:
+        response = response.json()
+        if 'records' in response.keys():
+            return response['records']['pmcid']
+        else:
+            return None
+    else:
+        return None

@@ -4,7 +4,7 @@ import re
 from time import ctime
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import cpu_count
-from cbio_case_lists import cbioportal_case_lists
+from cbioportal.utilities.cbio_case_lists import cbioportal_case_lists
 from other import *
 
 reference_df = get_hugo2ncbi()
