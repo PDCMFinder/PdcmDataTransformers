@@ -425,7 +425,7 @@ class cBioPortal:
         if not exists(self.study_dir):
             makedirs(self.study_dir)
         self.meta_and_clinical_files()
-        if provider != "CRL" and not provider.__contains__("Curie"):
+        if provider != "CRL" and not provider.__contains__("Curie") and provider != 'NKI':
             with ThreadPoolExecutor(max_workers=self.threads) as executor:
                 executor.map(self.generate_molecular_data_files, dt)
         cases = cbioportal_case_lists(self.case_conf, self.study_dir, provider, False, False)
